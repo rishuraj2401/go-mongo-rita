@@ -15,12 +15,12 @@ import (
 
 const (
     uri       = "mongodb://localhost:27017"
-	duration  = 10* time.Second
-	primaryDB = "mydatabase"
+	duration  = 100* time.Second
+	primaryDB = "rita-data"
 	blDbname  = "rita-bl"	
 	config = "config.yaml"
 	zeekPath= "/opt/zeek/logs/current/"
-	totalchunk = "24"
+	totalchunk = "5"
 	brokerAddress   = "kafka.cosgrid.com:9092"
 	
 )

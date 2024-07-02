@@ -1,0 +1,12 @@
+mongodb:
+  uri: "mongodb://localhost:27017"
+  duration: 10s
+  primaryDB: "mydatabase"
+  blDbname: "rita-bl"
+
+zeek:
+  path: "/opt/zeek/logs/current/"
+  totalchunk: "24"
+
+kafka:
+  brokerAddress: "kafka.cosgrid.com:9092"
