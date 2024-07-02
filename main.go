@@ -5,29 +5,65 @@ import (
 	"fmt"
 	kafkarita "go-mongo/kafka"
 	cmd "go-mongo/ritaCmd"
+	
 	"log"
+	"os"
 	"sync"
 	"time"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"gopkg.in/yaml.v2"
 )
 
-const (
-    uri       = "mongodb://localhost:27017"
-	duration  = 100* time.Second
-	primaryDB = "rita-data"
-	blDbname  = "rita-bl"	
-	config = "config.yaml"
-	zeekPath= "/opt/zeek/logs/current/"
-	totalchunk = "5"
-	brokerAddress   = "kafka.cosgrid.com:9092"
+// var (
+//     uri       = "mongodb://localhost:27017"
+// 	duration  = 10* time.Second
+// 	primaryDB = "mydatabase"
+// 	blDbname  = "rita-bl"	
+// 	config = "config.yaml"
+// 	zeekPath= "/opt/zeek/logs/current/"
+// 	totalchunk = "24"
+// 	brokerAddress   = "kafka.cosgrid.com:9092"
 	
-)
+// )
 
+var brokerAddress string
+type Config struct {
+    MongoDB struct {
+        URI        string        `yaml:"uri"`
+        Duration   time.Duration `yaml:"duration"`
+        PrimaryDB  string        `yaml:"primaryDB"`
+        BLDbname   string        `yaml:"blDbname"`
+    } `yaml:"mongodb"`
+
+    Zeek struct {
+        Path      string `yaml:"path"`
+        TotalChunk string `yaml:"totalchunk"`
+		RitaConfig string `yaml:"ritaconfig"`
+    } `yaml:"zeek"`
+
+    Kafka struct {
+        BrokerAddress string `yaml:"brokerAddress"`
+    } `yaml:"kafka"`
+}
+// var brokerAddress string
 
 func main() {
-	clientOptions := options.Client().ApplyURI(uri)
+	var cfg Config
+
+    // Read config file
+    data, err := os.ReadFile("mongo.yaml")
+    if err != nil {
+        log.Fatalf("error reading config file: %v", err)
+    }
+
+    // Unmarshal YAML data into config struct
+    if err := yaml.Unmarshal(data, &cfg); err != nil {
+        log.Fatalf("error unmarshaling config: %v", err)
+    }
+	clientOptions := options.Client().ApplyURI(cfg.MongoDB.URI)
 	client, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
 		log.Fatal(err)
@@ -39,44 +75,47 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+   brokerAddress= cfg.Kafka.BrokerAddress
+
 	fmt.Println("Connected to MongoDB!")
 
-	ticker := time.NewTicker(duration)
+	ticker := time.NewTicker(cfg.MongoDB.Duration)
 
 	func() {
 		for range ticker.C {
-			cmd.RunCommands(primaryDB, config, zeekPath, totalchunk)
+			cmd.RunCommands(cfg.MongoDB.PrimaryDB, cfg.Zeek.RitaConfig, cfg.Zeek.Path, cfg.Zeek.TotalChunk)
 			var wg sync.WaitGroup
 			wg.Add(10) // We have two goroutines to wait for
 
 			go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "beacon", "beacon_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "beacon", "beacon_rita")
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "useragent", "user_agent_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "useragent", "user_agent_rita")
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "beaconSNI", "beacon_SNI_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "beaconSNI", "beacon_SNI_rita")
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "explodedDns", "beacon_DNS_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "explodedDns", "beacon_DNS_rita")
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "uconn", "uconn_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "uconn", "uconn_rita")
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "SNIconn", "SNIconn_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "SNIconn", "SNIconn_rita")
 			}()
 
 			go func() {
@@ -91,12 +130,12 @@ func main() {
 
             go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "host", "host_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "host", "host_rita")
 			}()
 
             go func() {
 				defer wg.Done()
-				getData(client, primaryDB, "hostnames", "bl_lists_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "hostnames", "bl_lists_rita")
 			}()
 
             // go func(){

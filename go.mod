@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/segmentio/kafka-go v0.4.47
 	go.mongodb.org/mongo-driver v1.16.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
