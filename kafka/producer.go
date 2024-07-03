@@ -26,7 +26,7 @@ func PubToKafka(name string, value []byte, kafkaAddress string) {
 		Addr:  kafka.TCP(kafkaAddress),
 		Topic: name,
 	}
-	fmt.Println("Writing Data: " + name)
+	// fmt.Println("Writing Data: " + name)
 	// fmt.Println(value)
 	err = w.WriteMessages(context.Background(),
 		kafka.Message{

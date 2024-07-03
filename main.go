@@ -5,7 +5,8 @@ import (
 	"fmt"
 	kafkarita "go-mongo/kafka"
 	cmd "go-mongo/ritaCmd"
-	
+	"strconv"
+
 	"log"
 	"os"
 	"sync"
@@ -17,19 +18,9 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// var (
-//     uri       = "mongodb://localhost:27017"
-// 	duration  = 10* time.Second
-// 	primaryDB = "mydatabase"
-// 	blDbname  = "rita-bl"	
-// 	config = "config.yaml"
-// 	zeekPath= "/opt/zeek/logs/current/"
-// 	totalchunk = "24"
-// 	brokerAddress   = "kafka.cosgrid.com:9092"
-	
-// )
 
 var brokerAddress string
+var primaryDB string
 type Config struct {
     MongoDB struct {
         URI        string        `yaml:"uri"`
@@ -39,9 +30,10 @@ type Config struct {
     } `yaml:"mongodb"`
 
     Zeek struct {
-        Path      string `yaml:"path"`
-        TotalChunk string `yaml:"totalchunk"`
-		RitaConfig string `yaml:"ritaconfig"`
+        Path       string   `yaml:"path"`
+        TotalChunk string  `yaml:"totalchunk"`
+		CurrChunk  string  `yaml:"currentchunk"`
+		RitaConfig string  `yaml:"ritaconfig"`
     } `yaml:"zeek"`
 
     Kafka struct {
@@ -77,71 +69,81 @@ func main() {
 	}
 
    brokerAddress= cfg.Kafka.BrokerAddress
+   primaryDB=cfg.MongoDB.PrimaryDB
 
 	fmt.Println("Connected to MongoDB!")
 
 	ticker := time.NewTicker(cfg.MongoDB.Duration)
-
+	chunk,_ := strconv.Atoi(cfg.Zeek.CurrChunk)
+	totChunk,_:=strconv.Atoi(cfg.Zeek.TotalChunk)
 	func() {
 		for range ticker.C {
-			cmd.RunCommands(cfg.MongoDB.PrimaryDB, cfg.Zeek.RitaConfig, cfg.Zeek.Path, cfg.Zeek.TotalChunk)
+
+	
+			if chunk >= totChunk{
+				chunk=0
+			}
+			
+            chunkStr:= strconv.Itoa(chunk)
+			cmd.RunCommands(cfg.MongoDB.PrimaryDB, cfg.Zeek.RitaConfig, cfg.Zeek.Path, cfg.Zeek.TotalChunk, chunkStr)
+			chunk++
 			var wg sync.WaitGroup
-			wg.Add(10) // We have two goroutines to wait for
+			wg.Add(11) // We have two goroutines to wait for
 
 			go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "beacon", "beacon_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "beacon", "beacon_rita", chunk-1)
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "useragent", "user_agent_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "useragent", "user_agent_rita", chunk-1)
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "beaconSNI", "beacon_SNI_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "beaconSNI", "beacon_SNI_rita" ,chunk-1)
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "explodedDns", "beacon_DNS_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "explodedDns", "DNS_rita" ,chunk-1)
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "uconn", "uconn_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "uconn", "uconn_rita", chunk-1)
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "SNIconn", "SNIconn_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "SNIconn", "SNIconn_rita",chunk-1)
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, "rita-bl", "ip", "bl_ip_rita")
+				getData(client, "rita-bl", "ip", "bl_ip_rita", chunk-1)
 			}()
 
 			go func() {
 				defer wg.Done()
-				getData(client, "rita-bl", "lists", "bl_lists_rita")
+				getData(client, "rita-bl", "lists", "bl_lists_rita", chunk-1)
 			}()
 
             go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "host", "host_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "host", "host_rita", chunk-1)
 			}()
 
             go func() {
 				defer wg.Done()
-				getData(client, cfg.MongoDB.PrimaryDB, "hostnames", "bl_lists_rita")
+				getData(client, cfg.MongoDB.PrimaryDB, "hostnames", "hostnames_rita", chunk-1)
 			}()
 
-            // go func(){
-            //     defer wg.Done()
-                
-            // }
+            go func(){
+                defer wg.Done()
+				cmd.ShowLongConnections(cfg.MongoDB.PrimaryDB, cfg.Kafka.BrokerAddress)    
+            }()
 
 			wg.Wait()
 
@@ -153,20 +155,32 @@ func main() {
 
 }
 
-func getData(client *mongo.Client, db string, colName string, topic string) {
+func getData(client *mongo.Client, db string, colName string, topic string, chunk int) {
 	database := client.Database(db)
 	collection := database.Collection(colName)
-	cursor, err := collection.Find(context.TODO(), bson.D{})
-	// var c1 mongo.Cursor
+	var cursor *mongo.Cursor
+	var err error
+	if db == primaryDB{
+		fmt.Println(db, colName)
+	cursor, err = collection.Find(context.TODO(), bson.M{"cid":chunk})
 	if err != nil {
 		log.Fatal(err)
 	}
+	}else{
+		cursor, err = collection.Find(context.TODO(), bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	}
+	// var c1 mongo.Cursor
+	
 	defer cursor.Close(context.TODO())
 	for cursor.Next(context.TODO()) {
 		var elem bson.Raw
 		err := cursor.Decode(&elem)
-		// fmt.Println(cursor1)
-
+		// if db ==primaryDB{
+		//  fmt.Println(cursor)}
+        fmt.Println(topic)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -1,12 +1,13 @@
 mongodb:
   uri: "mongodb://localhost:27017"
   duration: 10s
-  primaryDB: "utmvm_rita"
+  primaryDB: "mydb"
   blDbname: "rita-bl"
 
 zeek:
   path: "/opt/zeek/logs/current/"
-  totalchunk: "1"
+  totalchunk: "24"
+  currentchunk: "0"
   ritaconfig: "config.yaml"
 
 kafka:
